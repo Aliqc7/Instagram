@@ -3,6 +3,10 @@ import json
 import os
 import sys
 import re
+from tensorflow.keras.applications.resnet50 import ResNet50
+from tensorflow.keras.preprocessing import image
+from tensorflow.keras.applications.resnet50 import preprocess_input, decode_predictions
+import numpy as np
 
 
 def main():
@@ -23,11 +27,12 @@ def main():
     n_photos = 20
     max_photo_per_page = 2
     all_flickr_response_list = all_flickr_api_calls(base_url, method, params, n_photos, max_photo_per_page)
-    # dl_flickr_photos(all_flickr_response_list)
+    img_set = dl_flickr_photos(all_flickr_response_list)
 
-    print(all_flickr_response_list)
-
-
+    # print(img_set)
+    model = ResNet50(weights='imagenet')
+    tags_probs = tag_all_photos_Resnet50(model, "flickr_photo_dl/", img_set, 3)
+    print(tags_probs)
 def all_flickr_api_calls(base_url, method, params, n_photos, max_photo_per_call):
     all_flickr_response_json_list = []
     url = base_url + method
@@ -45,6 +50,38 @@ def single_flickr_api_call(url, params):
     response = requests.get(url, params=params)
     return response
 
+def tag_all_photos_Resnet50(model, path, img_set, n_tags):
+    tags_probs = []
+    for img in img_set:
+        img_path = path + img
+        img_id = re.sub("\.jpg$", "", img)
+        tag_probs = tag_single_photo_ResNet50(model, img_path, n_tags)
+        tags_probs.append({
+            "photo_id": img_id,
+            "tag_probs":tag_probs
+        })
+    return tags_probs
+
+def tag_single_photo_ResNet50(model, img_path, n_tag):
+    img = image.load_img(img_path, target_size=(224, 224))
+    x = image.img_to_array(img)
+    y = np.expand_dims(x, axis=0)
+    z = preprocess_input(y)
+
+    preds = model.predict(z)
+    # decode the results into a list of tuples (class, description, probability)
+    # (one such list for each sample in the batch)
+    decoded_preds = decode_predictions(preds, top=n_tag)[0]
+    tags_probs = []
+    encoding = "utf-8"
+    for i in range(len(decoded_preds)):
+        tag = str(decoded_preds[i][1])
+        prob = decoded_preds[i][2]
+        tags_probs.append((tag, prob))
+
+    return tags_probs
+
+
 
 def flickr_response_to_json(flickr_response):
     resp_text = flickr_response.text
@@ -56,6 +93,7 @@ def flickr_response_to_json(flickr_response):
 
 def dl_flickr_photos(all_flickr_response_list):
     n_lists = len(all_flickr_response_list)
+    img_set = set()
     for i in range(n_lists):
         for photo in all_flickr_response_list[i]["photos"]["photo"]:
             try:
@@ -68,7 +106,8 @@ def dl_flickr_photos(all_flickr_response_list):
             path_name = path + name
             with open(path_name, 'wb') as f:
                 f.write(img_data)
-
+            img_set.add(name)
+    return img_set
 
 def get_api_key():
     try:
