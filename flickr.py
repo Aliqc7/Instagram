@@ -118,6 +118,7 @@ def dl_flickr_photos(all_flickr_response_list):
 def create_photo_table():
     conn = sqlite3.connect("flickr.db")
     c = conn.cursor()
+    #TODO change photo_id to flicker_photo_id
     c.execute("""CREATE TABLE photos(
         photo_id TEXT,
         owner_id TEXT,
@@ -127,8 +128,25 @@ def create_photo_table():
         )""")
 
 
+def create_photo_tag_table():
+    conn = sqlite3.connect("flickr.db")
+    c = conn.cursor()
+    c.execute("""CREATE TABLE photo_tag(
+        photo_id INTEGER,
+        tag_id INTEGER,
+        prob REAL
+        )""")
+
+def create_tag_table():
+    conn = sqlite3.connect("flickr.db")
+    c = conn.cursor()
+    c.execute("""CREATE TABLE tags(
+        tag TEXT
+        )""")
+
+
 def create_input_for_photo_table(all_flickr_response_list):
-    input_list = []
+    photo_input_list = []
     n_lists = len(all_flickr_response_list)
     for i in range(n_lists):
         for photo in all_flickr_response_list[i]["photos"]["photo"]:
@@ -148,13 +166,80 @@ def create_input_for_photo_table(all_flickr_response_list):
                     None,
                     photo["url_q"]
                 )
-            input_list.append(photo_input)
-    return input_list
+            photo_input_list.append(photo_input)
+    return photo_input_list
 
 
-def add_photos_to_photo_table():
+def creat_input_for_tag_table(tags_probs_list):
+    tag_set = set()
+    for item in tags_probs_list:
+        for tag_prob in item["tag_probs"]:
+            tag_set.add(tag_prob[0])
+    tag_list = list(tag_set)
+    tag_list_tuple = [(elem,) for elem in tag_list]
+    return list(tag_list_tuple)
 
-    return
+
+def create_input_for_photo_tag_table(tags_probs_list):
+    photo_tag_input_list = []
+    for item in tags_probs_list:
+        item_photo_input_list = []
+        flickr_photo_id = item["photo_id"]
+        db_photo_id = get_db_photo_id(flickr_photo_id)
+        for tag_prob in item["tag_probs"]:
+            tag = tag_prob[0]
+            prob = float(tag_prob[1])
+            formatted_prob = f"{prob:.3f}"
+            tag_id = get_tag_id(tag)
+            item_photo_input_list.append((db_photo_id, tag_id, formatted_prob))
+
+        photo_tag_input_list.extend(item_photo_input_list)
+
+    return photo_tag_input_list
+
+
+def get_db_photo_id(flickr_photo_id):
+    flickr_photo_id = (flickr_photo_id,)
+    conn = sqlite3.connect("flickr.db")
+    c = conn.cursor()
+    # TODO Change photo_id to flickr_photo_id
+    c.execute("SELECT rowid FROM photos WHERE photo_id = ?", flickr_photo_id)
+    db_photo_id = c.fetchone()
+    conn.close()
+    return db_photo_id[0]
+
+
+def get_tag_id(tag):
+    tag = (tag,)
+    conn = sqlite3.connect("flickr.db")
+    c = conn.cursor()
+    c.execute("SELECT rowid FROM tags WHERE tag = ?", tag)
+    tag_id = c.fetchone()
+    conn.close()
+    return tag_id[0]
+
+def add_photos_to_photo_table(photo_input_list):
+    conn = sqlite3.connect("flickr.db")
+    c = conn.cursor()
+    c.executemany("INSERT INTO photos VALUES (?,?,?,?,?)", photo_input_list)
+    conn.commit()
+    conn.close()
+
+
+def add_tags_to_tag_table(tag_list):
+    conn = sqlite3.connect("flickr.db")
+    c = conn.cursor()
+    c.executemany("INSERT INTO tags VALUES (?)", tag_list)
+    conn.commit()
+    conn.close()
+
+
+def add_photo_tags_to_photo_tag_table(photo_tag_input_list):
+    conn = sqlite3.connect("flickr.db")
+    c = conn.cursor()
+    c.executemany("INSERT INTO photo_tag VALUES (?,?,?)", photo_tag_input_list)
+    conn.commit()
+    conn.close()
 
 def get_api_key():
     try:
