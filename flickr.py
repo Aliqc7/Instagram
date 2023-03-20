@@ -27,41 +27,48 @@ def main():
               }
     n_photos = 20
     max_photo_per_page = 2
-    all_flickr_response_list = all_flickr_api_calls(base_url, method, params, n_photos, max_photo_per_page)
-    img_set = dl_flickr_photos(all_flickr_response_list)
+    # all_flickr_response_list = all_flickr_api_calls(base_url, method, params, n_photos, max_photo_per_page)
+    # img_set = dl_flickr_photos(all_flickr_response_list)
 
     # print(img_set)
     model = ResNet50(weights='imagenet')
-    tags_probs = tag_all_photos_Resnet50(model, "flickr_photo_dl/", img_set, 3)
+    tags_probs = tag_all_photos_resnet50(model, "flickr_photo_dl/", img_set, 3)
     print(tags_probs)
 
-    conn = sqlite3.connect("flickr.db")
 
-
-def all_flickr_api_calls(base_url, method, params, n_photos, max_photo_per_call):
-    all_flickr_response_json_list = []
-    url = base_url + method
-    n_calls = int(n_photos / max_photo_per_call)
-    params["per_page"] = max_photo_per_call
+#DONE
+def param_list_for_all_api_calls(params, n_photos, max_photo_per_page):
+    params_list = []
+    n_calls = int(n_photos / max_photo_per_page)
+    params["per_page"] = max_photo_per_page
     for i in range(n_calls):
         params["page"] = i + 1
-        flickr_single_response = single_flickr_api_call(url, params)
+        params_list.append(params.copy())
+    return params_list
+
+#DONE
+def all_flickr_api_calls(base_url, method, params_list):
+    url = base_url + method
+    n_calls = len(params_list)
+    for i in range(n_calls):
+        flickr_single_response = single_flickr_api_call(url, params_list[i])
         flickr_single_response_json = flickr_response_to_json(flickr_single_response)
-        all_flickr_response_json_list.append(flickr_single_response_json)
-    return all_flickr_response_json_list
+        photo_input_list = create_input_for_photo_table(flickr_single_response_json)
+        add_photos_to_photo_table(photo_input_list)
 
-
+#DONE
 def single_flickr_api_call(url, params):
     response = requests.get(url, params=params)
     return response
 
 
-def tag_all_photos_Resnet50(model, path, img_set, n_tags):
+#TODO
+def tag_all_photos_resnet50(model, path, img_set, n_tags):
     tags_probs = []
     for img in img_set:
         img_path = path + img
         img_id = re.sub("\.jpg$", "", img)
-        tag_probs = tag_single_photo_ResNet50(model, img_path, n_tags)
+        tag_probs = tag_single_photo_resNet50(model, img_path, n_tags)
         tags_probs.append({
             "photo_id": img_id,
             "tag_probs": tag_probs
@@ -69,7 +76,8 @@ def tag_all_photos_Resnet50(model, path, img_set, n_tags):
     return tags_probs
 
 
-def tag_single_photo_ResNet50(model, img_path, n_tag):
+#TODO
+def tag_single_photo_resNet50(model, img_path, n_tag):
     img = image.load_img(img_path, target_size=(224, 224))
     x = image.img_to_array(img)
     y = np.expand_dims(x, axis=0)
@@ -87,7 +95,7 @@ def tag_single_photo_ResNet50(model, img_path, n_tag):
 
     return tags_probs
 
-
+#DONE
 def flickr_response_to_json(flickr_response):
     resp_text = flickr_response.text
     resp_text_reged = re.sub("^jsonFlickrApi\(", "", resp_text)
@@ -95,24 +103,28 @@ def flickr_response_to_json(flickr_response):
     flickr_response_json = json.loads(resp_text_reged)
     return flickr_response_json
 
+#DONE
+def fetch_photo_url_form_db(photo_id):
+    conn = sqlite3.connect("flickr.db")
+    c = conn.cursor()
+    c.execute("SELECT url_o FROM photos WHERE photo_id = ?", (photo_id,))
+    url_o = c.fetchone()[0]
+    c.execute("SELECT url_q FROM photos WHERE photo_id = ?", (photo_id,))
+    url_q = c.fetchone()[0]
+    conn.close()
+    return url_o, url_q
 
-def dl_flickr_photos(all_flickr_response_list):
-    n_lists = len(all_flickr_response_list)
-    img_set = set()
-    for i in range(n_lists):
-        for photo in all_flickr_response_list[i]["photos"]["photo"]:
-            try:
-                img_url = photo["url_o"]
-            except KeyError:
-                img_url = photo["url_q"]
-            img_data = requests.get(img_url).content
-            path = "flickr_photo_dl/"
-            name = f"{photo['id']}.jpg"
-            path_name = path + name
-            with open(path_name, 'wb') as f:
-                f.write(img_data)
-            img_set.add(name)
-    return img_set
+
+def dl_single_photo(photo_id, dl_path):
+    url_o, url_q = fetch_photo_url_form_db(photo_id)
+    if url_o is not None:
+        img_data = requests.get(url_o).content
+    else:
+        img_data = requests.get(url_q).content
+    name = f"{photo_id}.jpg"
+    path_name = dl_path +name
+    with open(path_name, "wb") as f:
+        f.write(img_data)
 
 
 def create_photo_table():
@@ -120,7 +132,7 @@ def create_photo_table():
     c = conn.cursor()
     #TODO change photo_id to flicker_photo_id
     c.execute("""CREATE TABLE photos(
-        photo_id TEXT,
+        photo_id TEXT NOT NULL PRIMARY KEY,
         owner_id TEXT,
         views INTEGER,
         url_o TEXT,
@@ -145,28 +157,26 @@ def create_tag_table():
         )""")
 
 
-def create_input_for_photo_table(all_flickr_response_list):
+def create_input_for_photo_table(flickr_response_json):
     photo_input_list = []
-    n_lists = len(all_flickr_response_list)
-    for i in range(n_lists):
-        for photo in all_flickr_response_list[i]["photos"]["photo"]:
-            try:
-                photo_input = (
-                    photo["id"],
-                    photo["owner"],
-                    int(photo["views"]),
-                    photo["url_o"],
-                    photo["url_q"]
+    for photo in flickr_response_json["photos"]["photo"]:
+        try:
+            photo_input = (
+                photo["id"],
+                photo["owner"],
+                int(photo["views"]),
+                photo["url_o"],
+                photo["url_q"]
                 )
-            except KeyError:
-                photo_input = (
-                    photo["id"],
-                    photo["owner"],
-                    int(photo["views"]),
-                    None,
-                    photo["url_q"]
+        except KeyError:
+            photo_input = (
+                photo["id"],
+                photo["owner"],
+                int(photo["views"]),
+                None,
+                photo["url_q"]
                 )
-            photo_input_list.append(photo_input)
+        photo_input_list.append(photo_input)
     return photo_input_list
 
 
@@ -221,7 +231,7 @@ def get_tag_id(tag):
 def add_photos_to_photo_table(photo_input_list):
     conn = sqlite3.connect("flickr.db")
     c = conn.cursor()
-    c.executemany("INSERT INTO photos VALUES (?,?,?,?,?)", photo_input_list)
+    c.executemany("INSERT INTO photos VALUES (?,?,?,?,?) ON CONFLICT(photo_id) DO NOTHING", photo_input_list)
     conn.commit()
     conn.close()
 
