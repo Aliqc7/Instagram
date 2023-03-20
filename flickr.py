@@ -62,23 +62,23 @@ def single_flickr_api_call(url, params):
     return response
 
 
-#TODO
-def tag_all_photos_resnet50(model, path, img_set, n_tags):
+#DONE
+def tag_all_photos_resnet50(model, dl_path, photo_list, n_tags):
     tags_probs = []
-    for img in img_set:
-        img_path = path + img
-        img_id = re.sub("\.jpg$", "", img)
-        tag_probs = tag_single_photo_resNet50(model, img_path, n_tags)
+    for photo_id in photo_list:
+        tag_probs = tag_single_photo_resNet50(model, photo_id, dl_path, n_tags)
         tags_probs.append({
-            "photo_id": img_id,
+            "photo_id": photo_id,
             "tag_probs": tag_probs
         })
     return tags_probs
 
 
-#TODO
-def tag_single_photo_resNet50(model, img_path, n_tag):
-    img = image.load_img(img_path, target_size=(224, 224))
+#DONE
+def tag_single_photo_resNet50(model, photo_id, dl_path, n_tags):
+    name = f"{photo_id}.jpg"
+    path_name = dl_path + name
+    img = image.load_img(path_name, target_size=(224, 224))
     x = image.img_to_array(img)
     y = np.expand_dims(x, axis=0)
     z = preprocess_input(y)
@@ -86,7 +86,7 @@ def tag_single_photo_resNet50(model, img_path, n_tag):
     preds = model.predict(z)
     # decode the results into a list of tuples (class, description, probability)
     # (one such list for each sample in the batch)
-    decoded_preds = decode_predictions(preds, top=n_tag)[0]
+    decoded_preds = decode_predictions(preds, top=n_tags)[0]
     tags_probs = []
     for i in range(len(decoded_preds)):
         tag = str(decoded_preds[i][1])
@@ -103,6 +103,8 @@ def flickr_response_to_json(flickr_response):
     flickr_response_json = json.loads(resp_text_reged)
     return flickr_response_json
 
+
+
 #DONE
 def fetch_photo_url_form_db(photo_id):
     conn = sqlite3.connect("flickr.db")
@@ -114,7 +116,7 @@ def fetch_photo_url_form_db(photo_id):
     conn.close()
     return url_o, url_q
 
-
+#DONE
 def dl_single_photo(photo_id, dl_path):
     url_o, url_q = fetch_photo_url_form_db(photo_id)
     if url_o is not None:
@@ -126,7 +128,24 @@ def dl_single_photo(photo_id, dl_path):
     with open(path_name, "wb") as f:
         f.write(img_data)
 
+#DONE
+def fetch_photo_list_from_db():
+    photo_list = []
+    conn = sqlite3.connect("flickr.db")
+    c = conn.cursor()
+    c.execute("SELECT photo_id FROM photos")
+    photo_list_db = c.fetchall()
+    conn.close()
+    [photo_list.append(int(photo)) for (photo,) in photo_list_db]
+    return photo_list
 
+
+def dl_all_photos(photo_list, dl_path):
+    for photo_id in photo_list:
+        dl_single_photo(photo_id, dl_path)
+
+
+#Done
 def create_photo_table():
     conn = sqlite3.connect("flickr.db")
     c = conn.cursor()
@@ -140,6 +159,7 @@ def create_photo_table():
         )""")
 
 
+#DONE
 def create_photo_tag_table():
     conn = sqlite3.connect("flickr.db")
     c = conn.cursor()
@@ -149,6 +169,7 @@ def create_photo_tag_table():
         prob REAL
         )""")
 
+#DONE
 def create_tag_table():
     conn = sqlite3.connect("flickr.db")
     c = conn.cursor()
@@ -156,7 +177,7 @@ def create_tag_table():
         tag TEXT
         )""")
 
-
+#DONE
 def create_input_for_photo_table(flickr_response_json):
     photo_input_list = []
     for photo in flickr_response_json["photos"]["photo"]:
@@ -179,7 +200,7 @@ def create_input_for_photo_table(flickr_response_json):
         photo_input_list.append(photo_input)
     return photo_input_list
 
-
+#DONE
 def creat_input_for_tag_table(tags_probs_list):
     tag_set = set()
     for item in tags_probs_list:
@@ -190,35 +211,35 @@ def creat_input_for_tag_table(tags_probs_list):
     return list(tag_list_tuple)
 
 
+#DONE
 def create_input_for_photo_tag_table(tags_probs_list):
     photo_tag_input_list = []
     for item in tags_probs_list:
         item_photo_input_list = []
-        flickr_photo_id = item["photo_id"]
-        db_photo_id = get_db_photo_id(flickr_photo_id)
+        photo_id = item["photo_id"]
         for tag_prob in item["tag_probs"]:
             tag = tag_prob[0]
             prob = float(tag_prob[1])
             formatted_prob = f"{prob:.3f}"
             tag_id = get_tag_id(tag)
-            item_photo_input_list.append((db_photo_id, tag_id, formatted_prob))
+            item_photo_input_list.append((photo_id, tag_id, formatted_prob))
 
         photo_tag_input_list.extend(item_photo_input_list)
 
     return photo_tag_input_list
 
 
-def get_db_photo_id(flickr_photo_id):
-    flickr_photo_id = (flickr_photo_id,)
-    conn = sqlite3.connect("flickr.db")
-    c = conn.cursor()
-    # TODO Change photo_id to flickr_photo_id
-    c.execute("SELECT rowid FROM photos WHERE photo_id = ?", flickr_photo_id)
-    db_photo_id = c.fetchone()
-    conn.close()
-    return db_photo_id[0]
+# def get_db_photo_id(flickr_photo_id):
+#     flickr_photo_id = (flickr_photo_id,)
+#     conn = sqlite3.connect("flickr.db")
+#     c = conn.cursor()
+#     # TODO Change photo_id to flickr_photo_id
+#     c.execute("SELECT rowid FROM photos WHERE photo_id = ?", flickr_photo_id)
+#     db_photo_id = c.fetchone()
+#     conn.close()
+#     return db_photo_id[0]
 
-
+#DONE
 def get_tag_id(tag):
     tag = (tag,)
     conn = sqlite3.connect("flickr.db")
@@ -228,6 +249,7 @@ def get_tag_id(tag):
     conn.close()
     return tag_id[0]
 
+#DONE
 def add_photos_to_photo_table(photo_input_list):
     conn = sqlite3.connect("flickr.db")
     c = conn.cursor()
@@ -235,7 +257,7 @@ def add_photos_to_photo_table(photo_input_list):
     conn.commit()
     conn.close()
 
-
+#DONE
 def add_tags_to_tag_table(tag_list):
     conn = sqlite3.connect("flickr.db")
     c = conn.cursor()
@@ -243,7 +265,7 @@ def add_tags_to_tag_table(tag_list):
     conn.commit()
     conn.close()
 
-
+#DONE
 def add_photo_tags_to_photo_tag_table(photo_tag_input_list):
     conn = sqlite3.connect("flickr.db")
     c = conn.cursor()
