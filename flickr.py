@@ -8,6 +8,7 @@ from tensorflow.keras.preprocessing import image
 from tensorflow.keras.applications.resnet50 import preprocess_input, decode_predictions
 import numpy as np
 import sqlite3
+from PIL import Image
 
 
 def main():
@@ -272,6 +273,34 @@ def add_photo_tags_to_photo_tag_table(photo_tag_input_list):
     c.executemany("INSERT INTO photo_tag VALUES (?,?,?)", photo_tag_input_list)
     conn.commit()
     conn.close()
+
+
+
+def find_photo_ids_for_tag(tag):
+    photo_list = []
+    tag_id = get_tag_id(tag)
+    tag_id = (tag_id, )
+    conn = sqlite3.connect("flickr.db")
+    c = conn.cursor()
+    c.execute("""
+    SELECT photo_id 
+    FROM photo_tag 
+    WHERE tag_id = ?
+    LIMIT 3
+    """, tag_id)
+    photo_ids = c.fetchall()
+    conn.close()
+    [photo_list.append(int(photo_id)) for (photo_id,) in photo_ids]
+    return photo_list
+
+
+def show_photo(photo_id, dl_path):
+    name = f"{photo_id}.jpg"
+    path_name = dl_path + name
+    image = Image.open(path_name)
+    image.show()
+
+
 
 def get_api_key():
     try:
