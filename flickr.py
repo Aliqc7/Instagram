@@ -202,12 +202,16 @@ def create_input_for_photo_table(flickr_response_json):
     return photo_input_list
 
 #DONE
-def creat_input_for_tag_table(tags_probs_list):
+
+def create_tag_list(tags_probs_list):
     tag_set = set()
     for item in tags_probs_list:
         for tag_prob in item["tag_probs"]:
             tag_set.add(tag_prob[0])
     tag_list = list(tag_set)
+    return tag_list
+
+def creat_input_for_tag_table(tag_list):
     tag_list_tuple = [(elem,) for elem in tag_list]
     return list(tag_list_tuple)
 
@@ -294,12 +298,21 @@ def find_photo_ids_for_tag(tag):
     return photo_list
 
 
-def show_photo(photo_id, dl_path):
+def get_tag_list_form_db():
+    tag_list = []
+    conn = sqlite3.connect("flickr.db")
+    c = conn.cursor()
+    c.execute("SELECT tag FROM tags")
+    tags = c.fetchall()
+    conn.close()
+    [tag_list.append(tag) for (tag,) in tags]
+    return tag_list
+
+def get_photo_image(photo_id, dl_path):
     name = f"{photo_id}.jpg"
     path_name = dl_path + name
     image = Image.open(path_name)
-    image.show()
-
+    return image
 
 
 def get_api_key():
