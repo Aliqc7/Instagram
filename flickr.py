@@ -3,9 +3,9 @@ import json
 import os
 import sys
 import re
-from tensorflow.keras.applications.resnet50 import ResNet50
-from tensorflow.keras.preprocessing import image
-from tensorflow.keras.applications.resnet50 import preprocess_input, decode_predictions
+# from tensorflow.keras.applications.resnet50 import ResNet50
+# from tensorflow.keras.preprocessing import image
+# from tensorflow.keras.applications.resnet50 import preprocess_input, decode_predictions
 import numpy as np
 import sqlite3
 from PIL import Image
@@ -56,6 +56,8 @@ def all_flickr_api_calls(base_url, method, params_list):
         flickr_single_response_json = flickr_response_to_json(flickr_single_response)
         photo_input_list = create_input_for_photo_table(flickr_single_response_json)
         add_photos_to_photo_table(photo_input_list)
+
+
 
 #DONE
 def single_flickr_api_call(url, params):
@@ -147,8 +149,8 @@ def dl_all_photos(photo_list, dl_path):
 
 
 #Done
-def create_photo_table():
-    conn = sqlite3.connect("flickr.db")
+def create_photo_table(db_name):
+    conn = sqlite3.connect(db_name)
     c = conn.cursor()
     #TODO change photo_id to flicker_photo_id
     c.execute("""CREATE TABLE photos(
@@ -161,8 +163,8 @@ def create_photo_table():
 
 
 #DONE
-def create_photo_tag_table():
-    conn = sqlite3.connect("flickr.db")
+def create_photo_tag_table(db_name):
+    conn = sqlite3.connect(db_name)
     c = conn.cursor()
     c.execute("""CREATE TABLE photo_tag(
         photo_id INTEGER,
@@ -171,8 +173,8 @@ def create_photo_tag_table():
         )""")
 
 #DONE
-def create_tag_table():
-    conn = sqlite3.connect("flickr.db")
+def create_tag_table(db_name):
+    conn = sqlite3.connect(db_name)
     c = conn.cursor()
     c.execute("""CREATE TABLE tags(
         tag TEXT
@@ -245,9 +247,9 @@ def create_input_for_photo_tag_table(tags_probs_list):
 #     return db_photo_id[0]
 
 #DONE
-def get_tag_id(tag):
+def get_tag_id(tag, db_name):
     tag = (tag,)
-    conn = sqlite3.connect("flickr.db")
+    conn = sqlite3.connect(db_name)
     c = conn.cursor()
     c.execute("SELECT rowid FROM tags WHERE tag = ?", tag)
     tag_id = c.fetchone()
@@ -255,24 +257,24 @@ def get_tag_id(tag):
     return tag_id[0]
 
 #DONE
-def add_photos_to_photo_table(photo_input_list):
-    conn = sqlite3.connect("flickr.db")
+def add_photos_to_photo_table(photo_input_list, db_name):
+    conn = sqlite3.connect(db_name)
     c = conn.cursor()
     c.executemany("INSERT INTO photos VALUES (?,?,?,?,?) ON CONFLICT(photo_id) DO NOTHING", photo_input_list)
     conn.commit()
     conn.close()
 
 #DONE
-def add_tags_to_tag_table(tag_list):
-    conn = sqlite3.connect("flickr.db")
+def add_tags_to_tag_table(tag_list, db_name):
+    conn = sqlite3.connect(db_name)
     c = conn.cursor()
     c.executemany("INSERT INTO tags VALUES (?)", tag_list)
     conn.commit()
     conn.close()
 
 #DONE
-def add_photo_tags_to_photo_tag_table(photo_tag_input_list):
-    conn = sqlite3.connect("flickr.db")
+def add_photo_tags_to_photo_tag_table(photo_tag_input_list, db_name):
+    conn = sqlite3.connect(db_name)
     c = conn.cursor()
     c.executemany("INSERT INTO photo_tag VALUES (?,?,?)", photo_tag_input_list)
     conn.commit()
@@ -280,11 +282,11 @@ def add_photo_tags_to_photo_tag_table(photo_tag_input_list):
 
 
 
-def find_photo_ids_for_tag(tag):
+def find_photo_ids_for_tag(tag, db_name):
     photo_list = []
     tag_id = get_tag_id(tag)
     tag_id = (tag_id, )
-    conn = sqlite3.connect("flickr.db")
+    conn = sqlite3.connect(db_name)
     c = conn.cursor()
     c.execute("""
     SELECT photo_id 
@@ -298,9 +300,9 @@ def find_photo_ids_for_tag(tag):
     return photo_list
 
 
-def get_tag_list_form_db():
+def get_tag_list_form_db(db_name):
     tag_list = []
-    conn = sqlite3.connect("flickr.db")
+    conn = sqlite3.connect(db_name)
     c = conn.cursor()
     c.execute("SELECT tag FROM tags")
     tags = c.fetchall()
