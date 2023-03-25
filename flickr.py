@@ -48,14 +48,14 @@ def param_list_for_all_api_calls(params, n_photos, max_photo_per_page):
     return params_list
 
 #DONE
-def all_flickr_api_calls(base_url, method, params_list):
+def all_flickr_api_calls(base_url, method, params_list, db_name):
     url = base_url + method
     n_calls = len(params_list)
     for i in range(n_calls):
         flickr_single_response = single_flickr_api_call(url, params_list[i])
         flickr_single_response_json = flickr_response_to_json(flickr_single_response)
         photo_input_list = create_input_for_photo_table(flickr_single_response_json)
-        add_photos_to_photo_table(photo_input_list)
+        add_photos_to_photo_table(photo_input_list, db_name)
 
 
 
@@ -109,8 +109,8 @@ def flickr_response_to_json(flickr_response):
 
 
 #DONE
-def fetch_photo_url_form_db(photo_id):
-    conn = sqlite3.connect("flickr.db")
+def fetch_photo_url_form_db(photo_id, db_name):
+    conn = sqlite3.connect(db_name)
     c = conn.cursor()
     c.execute("SELECT url_o FROM photos WHERE photo_id = ?", (photo_id,))
     url_o = c.fetchone()[0]
@@ -120,21 +120,23 @@ def fetch_photo_url_form_db(photo_id):
     return url_o, url_q
 
 #DONE
-def dl_single_photo(photo_id, dl_path):
-    url_o, url_q = fetch_photo_url_form_db(photo_id)
-    if url_o is not None:
-        img_data = requests.get(url_o).content
-    else:
-        img_data = requests.get(url_q).content
+def dl_single_photo(photo_id, dl_path, db_name):
+    url_o, url_q = fetch_photo_url_form_db(photo_id, db_name)
+    # if url_o is not None:
+    #     img_data = requests.get(url_o).content
+    # else:
+    #     img_data = requests.get(url_q).content
+    #TODO change this back for inference stage
+    img_data = requests.get(url_q).content
     name = f"{photo_id}.jpg"
     path_name = dl_path +name
     with open(path_name, "wb") as f:
         f.write(img_data)
 
 #DONE
-def fetch_photo_list_from_db():
+def fetch_photo_list_from_db(db_name):
     photo_list = []
-    conn = sqlite3.connect("flickr.db")
+    conn = sqlite3.connect(db_name)
     c = conn.cursor()
     c.execute("SELECT photo_id FROM photos")
     photo_list_db = c.fetchall()
@@ -143,9 +145,9 @@ def fetch_photo_list_from_db():
     return photo_list
 
 
-def dl_all_photos(photo_list, dl_path):
+def dl_all_photos(photo_list, dl_path, db_name):
     for photo_id in photo_list:
-        dl_single_photo(photo_id, dl_path)
+        dl_single_photo(photo_id, dl_path, db_name)
 
 
 #Done
@@ -190,7 +192,9 @@ def create_input_for_photo_table(flickr_response_json):
                 photo["owner"],
                 int(photo["views"]),
                 photo["url_o"],
-                photo["url_q"]
+                photo["url_q"],
+                #TODO remove hardcoded location
+                "Brisbane"
                 )
         except KeyError:
             photo_input = (
@@ -198,7 +202,8 @@ def create_input_for_photo_table(flickr_response_json):
                 photo["owner"],
                 int(photo["views"]),
                 None,
-                photo["url_q"]
+                photo["url_q"],
+                "Brisbane"
                 )
         photo_input_list.append(photo_input)
     return photo_input_list
@@ -235,6 +240,20 @@ def create_input_for_photo_tag_table(tags_probs_list):
 
     return photo_tag_input_list
 
+def create_input_for_manual_tag_photo_table(photo_id, tag_list, tagger_name, db_name):
+    photo_tag_input_list = []
+    for tag in tag_list:
+        tag_id = get_tag_id(tag, db_name)
+        item_photo_input_list = (photo_id, tag_id, tagger_name)
+        photo_tag_input_list.append(item_photo_input_list)
+    return photo_tag_input_list
+
+def create_input_for_manual_tag_photo_vector_table(photo_id, tag_vector, tagger_name):
+    photo_tag_vector_input_list = [photo_id, tagger_name]
+    photo_tag_vector_input_list.extend(tag_vector)
+    return photo_tag_vector_input_list
+
+
 
 # def get_db_photo_id(flickr_photo_id):
 #     flickr_photo_id = (flickr_photo_id,)
@@ -260,7 +279,7 @@ def get_tag_id(tag, db_name):
 def add_photos_to_photo_table(photo_input_list, db_name):
     conn = sqlite3.connect(db_name)
     c = conn.cursor()
-    c.executemany("INSERT INTO photos VALUES (?,?,?,?,?) ON CONFLICT(photo_id) DO NOTHING", photo_input_list)
+    c.executemany("INSERT INTO photos VALUES (?,?,?,?,?,?) ON CONFLICT(photo_id) DO NOTHING", photo_input_list)
     conn.commit()
     conn.close()
 
@@ -280,7 +299,12 @@ def add_photo_tags_to_photo_tag_table(photo_tag_input_list, db_name):
     conn.commit()
     conn.close()
 
-
+def add_photo_tags_to_photo_tag_vector_table(photo_tag_input_list, db_name):
+    conn = sqlite3.connect(db_name)
+    c = conn.cursor()
+    c.execute("INSERT INTO photo_tag_vector VALUES (?,?,?,?,?,?,?,?,?,?,?)", photo_tag_input_list)
+    conn.commit()
+    conn.close()
 
 def find_photo_ids_for_tag(tag, db_name):
     photo_list = []
@@ -322,6 +346,43 @@ def get_api_key():
         return os.environ["FLICKR_API_KEY"]
     except KeyError:
         sys.exit("Provide the FLICKR_API_KEY as an environment variable")
+
+
+
+def choose_photo_to_tag_manually(db_name):
+    conn = sqlite3.connect(db_name)
+    c = conn.cursor()
+    c.execute("SELECT photo_id FROM photos WHERE tagged == 0")
+    untagged_photo_list = c.fetchall()
+    n_untagged = len(untagged_photo_list)
+    random_index = np.random.randint(n_untagged)
+    random_id = untagged_photo_list[random_index]
+    random_id = random_id[0]
+    return int(random_id)
+
+def get_photo_for_manual_tagging(db_name, dl_path):
+    photo_id = choose_photo_to_tag_manually(db_name)
+    image = get_photo_image(photo_id, dl_path)
+    image = image.resize((500, 500))
+    return photo_id, image
+
+def create_manual_photo_tag_vector_table(db_name, tag_list):
+    conn = sqlite3.connect(db_name)
+    c = conn.cursor()
+    c.execute("""CREATE TABLE photo_tag_vector(
+        photo_id INTEGER,
+        tagger_name TEXT 
+        )""")
+    for tag in tag_list:
+        c.execute(f"ALTER TABLE photo_tag_vector ADD COLUMN {tag} INTEGER")
+
+def update_tag_status(photo_id, db_name):
+    conn = sqlite3.connect(db_name)
+    c = conn.cursor()
+    c.execute(" UPDATE photos SET tagged == 1 WHERE photo_id = ?", (photo_id,))
+    conn.commit()
+    conn.close()
+
 
 
 if __name__ == "__main__":
