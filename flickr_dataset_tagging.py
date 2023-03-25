@@ -42,17 +42,15 @@ with col2:
     with open('current_photo.txt', 'r') as f:
         photo_id = int(f.read())
     st.write("Please select all relevant tags and click submit")
-    selected_tag_list = []
     with st.form("entry_form", clear_on_submit=True):
         selected_tags = [st.checkbox(tag) for tag in tag_list]
+        int_selected_tags = [int(b) for b in selected_tags]
         submitted = st.form_submit_button("Submit")
-        st.write(selected_tags)
         if submitted:
-            for tag, selected in zip(tag_list, selected_tags):
-                if selected == 1:
-                    selected_tag_list.append(tag)
-        st.write(selected_tag_list)
-        photo_tag_input_list = flickr.create_input_for_manual_tag_photo_table(photo_id, selected_tag_list, tagger_name, db_name)
-        st.write(photo_tag_input_list)
-        flickr.add_photo_tags_to_photo_tag_table(photo_tag_input_list, db_name)
+            photo_tag_vector_input_list = flickr.create_input_for_manual_tag_photo_vector_table(photo_id, int_selected_tags, tagger_name)
+            flickr.add_photo_tags_to_photo_tag_vector_table(photo_tag_vector_input_list, db_name)
+            flickr.update_tag_status(photo_id, db_name)
+            st.write(f"Successfully uploaded thank you very much {tagger_name}!")
+
+
 
