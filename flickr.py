@@ -9,6 +9,8 @@ import re
 import numpy as np
 import sqlite3
 from PIL import Image
+import boto3
+
 
 
 def main():
@@ -370,7 +372,7 @@ def create_manual_photo_tag_vector_table(db_name, tag_list):
     conn = sqlite3.connect(db_name)
     c = conn.cursor()
     c.execute("""CREATE TABLE photo_tag_vector(
-        photo_id INTEGER,
+        photo_id INTEGER PRIMARY KEY ,
         tagger_name TEXT 
         )""")
     for tag in tag_list:
@@ -382,6 +384,17 @@ def update_tag_status(photo_id, db_name):
     c.execute(" UPDATE photos SET tagged == 1 WHERE photo_id = ?", (photo_id,))
     conn.commit()
     conn.close()
+
+def read_image_from_s3(key, bucket_name):
+    s3 = boto3.resource("s3")
+    bucket = s3.Bucket(bucket_name)
+    obj = bucket.Object(key)
+    response = obj.get()
+    file_stream = response['Body']
+    image = Image.open(file_stream)
+    image = image.resize((500, 500))
+    return image
+
 
 
 

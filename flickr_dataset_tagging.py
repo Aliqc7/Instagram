@@ -1,4 +1,3 @@
-import numpy as np
 import streamlit as st
 import flickr
 
@@ -10,6 +9,7 @@ layout = "centered"
 dl_path = 'input_photos/'
 db_name = "flickr_dataset.db"
 dl_path = "input_photos/"
+bucket_name = "flickr-input-photos"
 # ---------------------------------------------
 
 
@@ -19,7 +19,7 @@ st.title(page_title + "" + page_icon)
 
 # ------------------------------
 
-tag_list = ["Nature", "Animals", "People", "Vehicles", "Food", "Buildings", "Art and Design", "Technology", "Landscape"]
+tag_list = ["Nature", "Animals", "People", "Vehicles", "Food", "Buildings", "Art and Design", "Technology", "Landscape", "None"]
 photo_id = 0
 with st.container():
     tagger_name = st.text_input("Please write your name here and press Enter", value="Unknown")
@@ -32,7 +32,9 @@ with col1:
     clicked = st.button("Show photo")
 
     if clicked:
-        photo_id, image = flickr.get_photo_for_manual_tagging(db_name, dl_path)
+        photo_id = flickr.choose_photo_to_tag_manually(db_name)
+        key = f"{photo_id}.jpg"
+        image = flickr.read_image_from_s3(key, bucket_name)
         st.image(image)
         st.write(photo_id)
         with open('current_photo.txt', 'w') as f:
