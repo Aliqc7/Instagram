@@ -32,7 +32,7 @@ def main():
     max_photo_per_page = 2
     # all_flickr_response_list = all_flickr_api_calls(base_url, method, params, n_photos, max_photo_per_page)
     # img_set = dl_flickr_photos(all_flickr_response_list)
-
+    tag_list = ["Outdoor", "Indoor", "Day", "Night", "People", "No_People", "Pet", "No_pet", "NA"]
     # print(img_set)
     model = ResNet50(weights='imagenet')
     tags_probs = tag_all_photos_resnet50(model, "flickr_photo_dl/", img_set, 3)
@@ -176,6 +176,15 @@ def create_photo_tag_table(db_name):
         prob REAL
         )""")
 
+def create_photo_tag_table_for_manual_tagging(db_name):
+    conn = sqlite3.connect(db_name)
+    c = conn.cursor()
+    c.execute("""CREATE TABLE photo_tag(
+        photo_id INTEGER,
+        tag_id INTEGER,
+        tagger_name TEXT
+        )""")
+
 #DONE
 def create_tag_table(db_name):
     conn = sqlite3.connect(db_name)
@@ -242,18 +251,18 @@ def create_input_for_photo_tag_table(tags_probs_list):
 
     return photo_tag_input_list
 
-def create_input_for_manual_tag_photo_table(photo_id, tag_list, tagger_name, db_name):
+def create_input_for_manual_tag_photo_table(photo_id, selected_tags, tagger_name, db_name):
     photo_tag_input_list = []
-    for tag in tag_list:
+    for tag in selected_tags:
         tag_id = get_tag_id(tag, db_name)
         item_photo_input_list = (photo_id, tag_id, tagger_name)
         photo_tag_input_list.append(item_photo_input_list)
     return photo_tag_input_list
 
-def create_input_for_manual_tag_photo_vector_table(photo_id, tag_vector, tagger_name):
-    photo_tag_vector_input_list = [photo_id, tagger_name]
-    photo_tag_vector_input_list.extend(tag_vector)
-    return photo_tag_vector_input_list
+# def create_input_for_manual_tag_photo_vector_table(photo_id, tag_vector, tagger_name):
+#     photo_tag_vector_input_list = [photo_id, tagger_name]
+#     photo_tag_vector_input_list.extend(tag_vector)
+#     return photo_tag_vector_input_list
 
 
 
@@ -286,10 +295,11 @@ def add_photos_to_photo_table(photo_input_list, db_name):
     conn.close()
 
 #DONE
-def add_tags_to_tag_table(tag_list, db_name):
+def add_tags_to_tag_table(tag_list_tuple, db_name):
     conn = sqlite3.connect(db_name)
     c = conn.cursor()
-    c.executemany("INSERT INTO tags VALUES (?)", tag_list)
+    c.execute("DELETE FROM tags")
+    c.executemany("INSERT INTO tags VALUES (?)", tag_list_tuple)
     conn.commit()
     conn.close()
 
@@ -301,12 +311,12 @@ def add_photo_tags_to_photo_tag_table(photo_tag_input_list, db_name):
     conn.commit()
     conn.close()
 
-def add_photo_tags_to_photo_tag_vector_table(photo_tag_input_list, db_name):
-    conn = sqlite3.connect(db_name)
-    c = conn.cursor()
-    c.execute("INSERT INTO photo_tag_vector VALUES (?,?,?,?,?,?,?,?,?,?,?)", photo_tag_input_list)
-    conn.commit()
-    conn.close()
+# def add_photo_tags_to_photo_tag_vector_table(photo_tag_input_list, db_name):
+#     conn = sqlite3.connect(db_name)
+#     c = conn.cursor()
+#     c.execute("INSERT INTO photo_tag_vector VALUES (?,?,?,?,?,?,?,?,?,?,?)", photo_tag_input_list)
+#     conn.commit()
+#     conn.close()
 
 def find_photo_ids_for_tag(tag, db_name):
     photo_list = []
@@ -362,21 +372,21 @@ def choose_photo_to_tag_manually(db_name):
     random_id = random_id[0]
     return int(random_id)
 
-def get_photo_for_manual_tagging(db_name, dl_path):
-    photo_id = choose_photo_to_tag_manually(db_name)
-    image = get_photo_image(photo_id, dl_path)
-    image = image.resize((500, 500))
-    return photo_id, image
+# def get_photo_for_manual_tagging_from_disk(db_name, dl_path):
+#     photo_id = choose_photo_to_tag_manually(db_name)
+#     image = get_photo_image(photo_id, dl_path)
+#     image = image.resize((500, 500))
+#     return photo_id, image
 
-def create_manual_photo_tag_vector_table(db_name, tag_list):
-    conn = sqlite3.connect(db_name)
-    c = conn.cursor()
-    c.execute("""CREATE TABLE photo_tag_vector(
-        photo_id INTEGER PRIMARY KEY ,
-        tagger_name TEXT 
-        )""")
-    for tag in tag_list:
-        c.execute(f"ALTER TABLE photo_tag_vector ADD COLUMN {tag} INTEGER")
+# def create_manual_photo_tag_vector_table(db_name, tag_list):
+#     conn = sqlite3.connect(db_name)
+#     c = conn.cursor()
+#     c.execute("""CREATE TABLE photo_tag_vector(
+#         photo_id INTEGER PRIMARY KEY ,
+#         tagger_name TEXT
+#         )""")
+#     for tag in tag_list:
+#         c.execute(f"ALTER TABLE photo_tag_vector ADD COLUMN {tag} INTEGER")
 
 def update_tag_status(photo_id, db_name):
     conn = sqlite3.connect(db_name)
@@ -392,8 +402,8 @@ def read_image_from_s3(key, bucket_name):
     response = obj.get()
     file_stream = response['Body']
     image = Image.open(file_stream)
-    image = image.resize((500, 500))
     return image
+
 
 
 
