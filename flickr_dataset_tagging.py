@@ -17,6 +17,10 @@ st.set_page_config(page_title=page_title, page_icon=page_icon, layout=layout)
 st.title(page_title + "" + page_icon)
 
 
+def set_new_photo_in_session(streamlit_handle, cursor):
+    streamlit_handle.session_state[photo_id] = str(flickr.choose_photo_to_tag_manually_pg(cursor))
+
+
 @st.cache_resource
 def get_secrets():
     return flickr.get_aws_secret_for_db(secret_name, region_name)
@@ -37,12 +41,10 @@ tag_list = flickr.get_tag_list_form_db_pg(c)
 
 show_photo = "show_photo"
 should_disable = "should_disable"
+photo_id = "photo_id"
 
 
 def run():
-    if show_photo not in st.session_state:
-        st.session_state[show_photo] = True
-
     with st.container():
         tagger_name = st.text_input("Please write your name here and press Enter", value="Unknown")
         if tagger_name:
@@ -50,18 +52,16 @@ def run():
 
     col1, col2 = st.columns(2)
     with col1:
-        if st.session_state[show_photo]:
-            photo_id = flickr.choose_photo_to_tag_manually_pg(c)
-            key = f"{photo_id}.jpg"
-            image = flickr.read_image_from_s3(key, bucket_name)
-            image = image.resize((500, 500))
-            st.image(image)
-            st.write(photo_id)
-            st.session_state["photo_id"] = str(photo_id)
-            st.session_state[show_photo] = False
+        if photo_id not in st.session_state:
+            set_new_photo_in_session(st, c)
+
+        key = f"{st.session_state[photo_id]}.jpg"
+        image = flickr.read_image_from_s3(key, bucket_name)
+        image = image.resize((500, 500))
+        st.image(image)
+        st.write(st.session_state[photo_id])
 
     with col2:
-        photo_id = st.session_state["photo_id"]
         st.write("Please select all relevant tags and click submit")
 
         if should_disable not in st.session_state:
@@ -81,12 +81,13 @@ def run():
 
             submitted = st.form_submit_button("Submit")
             if submitted:
-                photo_tag_input_list = flickr.create_input_for_manual_tag_photo_table(photo_id, selected_tags,
+                photo_tag_input_list = flickr.create_input_for_manual_tag_photo_table(st.session_state[photo_id],
+                                                                                      selected_tags,
                                                                                       tagger_name, c)
                 flickr.add_photo_tags_to_photo_tag_table_pg(photo_tag_input_list, c)
-                flickr.update_tag_status_pg(photo_id, c)
+                flickr.update_tag_status_pg(st.session_state[photo_id], c)
                 st.write(f"Successfully uploaded! Thank you very much {tagger_name}!")
-                st.session_state[show_photo] = True
+                set_new_photo_in_session(st, c)
                 st.experimental_rerun()
 
 
