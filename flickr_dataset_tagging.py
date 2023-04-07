@@ -12,7 +12,7 @@ bucket_name = "flickr-input-photos"
 secret_name = "rds!db-fa439d53-e30b-4b60-9ced-321818cad173"
 region_name = "us-east-1"
 # ---------------------------------------------
-
+check_box_key = "check_box"
 st.set_page_config(page_title=page_title, page_icon=page_icon, layout=layout)
 st.title(page_title + "" + page_icon)
 
@@ -43,7 +43,8 @@ show_photo = "show_photo"
 should_disable = "should_disable"
 photo_id = "photo_id"
 
-
+def reset_checkbox():
+    st.session_state[check_box_key] = False
 def run():
     with st.container():
         tagger_name = st.text_input("Please write your name here and press Enter", value="Unknown")
@@ -64,9 +65,7 @@ def run():
     with col2:
         st.write("Please select all relevant tags and click submit")
 
-        if should_disable not in st.session_state:
-            st.session_state.should_disable = False
-        not_applicable = st.checkbox("None of the tags are applicable", value=False, key=should_disable)
+        not_applicable = st.checkbox("None of the tags are applicable", value=False, key=check_box_key)
 
         with st.form("entry_form", clear_on_submit=True):
             n_radio = math.floor(len(tag_list) / 2)
@@ -74,12 +73,12 @@ def run():
             for i in range(n_radio):
                 selected_tag = st.radio(f"{tag_list[2 * i]}/{tag_list[2 * i + 1]}",
                                         [tag_list[2 * i], tag_list[2 * i + 1]], key=i,
-                                        disabled=st.session_state.should_disable)
+                                        disabled=not_applicable)
                 selected_tags.append(selected_tag)
             if not_applicable:
                 selected_tags = ["NA"]
 
-            submitted = st.form_submit_button("Submit")
+            submitted = st.form_submit_button("Submit", on_click=reset_checkbox)
             if submitted:
                 photo_tag_input_list = flickr.create_input_for_manual_tag_photo_table(st.session_state[photo_id],
                                                                                       selected_tags,
