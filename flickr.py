@@ -10,6 +10,9 @@ import numpy as np
 import sqlite3
 from PIL import Image
 import boto3
+import ast
+from botocore.exceptions import ClientError
+import psycopg2
 
 
 
@@ -32,8 +35,12 @@ def main():
     max_photo_per_page = 2
     # all_flickr_response_list = all_flickr_api_calls(base_url, method, params, n_photos, max_photo_per_page)
     # img_set = dl_flickr_photos(all_flickr_response_list)
-    tag_list = ["Outdoor", "Indoor", "Day", "Night", "People", "No_People", "Pet", "No_pet", "NA"]
+    tag_list = [(1, "Outdoor"), (2, "Indoor"), (3, "Day"), (4, "Night"), (5, "People"), (6, "No_People"), (7, "Pet"), (8, "No_pet"), (9,"NA")]
     # print(img_set)
+    # AWS secret manager input
+    secret_name = "rds!db-fa439d53-e30b-4b60-9ced-321818cad173"
+    region_name = "us-east-1"
+
     model = ResNet50(weights='imagenet')
     tags_probs = tag_all_photos_resnet50(model, "flickr_photo_dl/", img_set, 3)
     print(tags_probs)
@@ -185,6 +192,14 @@ def create_photo_tag_table_for_manual_tagging(db_name):
         tagger_name TEXT
         )""")
 
+def create_photo_tag_table_for_manual_tagging_pg(cursor):
+    cursor.execute("""CREATE TABLE photo_tag(
+        photo_id TEXT,
+        tag_id INTEGER,
+        tagger_name TEXT
+        )""")
+
+
 #DONE
 def create_tag_table(db_name):
     conn = sqlite3.connect(db_name)
@@ -251,10 +266,10 @@ def create_input_for_photo_tag_table(tags_probs_list):
 
     return photo_tag_input_list
 
-def create_input_for_manual_tag_photo_table(photo_id, selected_tags, tagger_name, db_name):
+def create_input_for_manual_tag_photo_table(photo_id, selected_tags, tagger_name, cursor):
     photo_tag_input_list = []
     for tag in selected_tags:
-        tag_id = get_tag_id(tag, db_name)
+        tag_id = get_tag_id_pg(tag, cursor)
         item_photo_input_list = (photo_id, tag_id, tagger_name)
         photo_tag_input_list.append(item_photo_input_list)
     return photo_tag_input_list
@@ -286,6 +301,12 @@ def get_tag_id(tag, db_name):
     conn.close()
     return tag_id[0]
 
+def get_tag_id_pg(tag, cursor):
+    tag = (tag,)
+    cursor.execute("SELECT tag_id FROM tags WHERE tag = %s", tag)
+    tag_id = cursor.fetchone()
+    return tag_id[0]
+
 #DONE
 def add_photos_to_photo_table(photo_input_list, db_name):
     conn = sqlite3.connect(db_name)
@@ -304,6 +325,12 @@ def add_tags_to_tag_table(tag_list_tuple, db_name):
     conn.close()
 
 #DONE
+
+def add_tags_to_tag_table_pg(tag_list_tuple, cursor):
+    cursor.executemany("INSERT INTO tags (tag_id, tag) VALUES (%s, %s)", tag_list_tuple)
+
+
+
 def add_photo_tags_to_photo_tag_table(photo_tag_input_list, db_name):
     conn = sqlite3.connect(db_name)
     c = conn.cursor()
@@ -311,12 +338,27 @@ def add_photo_tags_to_photo_tag_table(photo_tag_input_list, db_name):
     conn.commit()
     conn.close()
 
+def add_photo_tags_to_photo_tag_table_pg(photo_tag_input_list, cursor):
+    cursor.executemany("INSERT INTO photo_tag VALUES (%s,%s,%s)", photo_tag_input_list)
+
+
 # def add_photo_tags_to_photo_tag_vector_table(photo_tag_input_list, db_name):
 #     conn = sqlite3.connect(db_name)
 #     c = conn.cursor()
 #     c.execute("INSERT INTO photo_tag_vector VALUES (?,?,?,?,?,?,?,?,?,?,?)", photo_tag_input_list)
 #     conn.commit()
 #     conn.close()
+
+def connect_to_postgres_db(secret_dict):
+    conn = psycopg2.connect(
+        host="flickrdb.copn4r8fqng4.us-east-1.rds.amazonaws.com",
+        port=5432,
+        database="input-label",
+        user=secret_dict["username"],
+        password=secret_dict["password"]
+    )
+    return conn
+
 
 def find_photo_ids_for_tag(tag, db_name):
     photo_list = []
@@ -343,6 +385,12 @@ def get_tag_list_form_db(db_name):
     c.execute("SELECT tag FROM tags")
     tags = c.fetchall()
     conn.close()
+    [tag_list.append(tag) for (tag,) in tags]
+    return tag_list
+def get_tag_list_form_db_pg(cursor):
+    tag_list = []
+    cursor.execute("SELECT tag FROM tags")
+    tags = cursor.fetchall()
     [tag_list.append(tag) for (tag,) in tags]
     return tag_list
 
@@ -372,6 +420,15 @@ def choose_photo_to_tag_manually(db_name):
     random_id = random_id[0]
     return int(random_id)
 
+def choose_photo_to_tag_manually_pg(cursor):
+    cursor.execute("SELECT photo_id FROM photos WHERE tagged = 0")
+    untagged_photo_list = cursor.fetchall()
+    n_untagged = len(untagged_photo_list)
+    random_index = np.random.randint(n_untagged)
+    random_id = untagged_photo_list[random_index]
+    random_id = random_id[0]
+    return int(random_id)
+
 # def get_photo_for_manual_tagging_from_disk(db_name, dl_path):
 #     photo_id = choose_photo_to_tag_manually(db_name)
 #     image = get_photo_image(photo_id, dl_path)
@@ -395,6 +452,10 @@ def update_tag_status(photo_id, db_name):
     conn.commit()
     conn.close()
 
+def update_tag_status_pg(photo_id, cursor):
+    cursor.execute(" UPDATE photos SET tagged = 1 WHERE photo_id = %s", (photo_id,))
+
+
 def read_image_from_s3(key, bucket_name):
     s3 = boto3.resource("s3")
     bucket = s3.Bucket(bucket_name)
@@ -403,6 +464,25 @@ def read_image_from_s3(key, bucket_name):
     file_stream = response['Body']
     image = Image.open(file_stream)
     return image
+
+
+def get_aws_secret_for_db(secret_name, region_name):
+
+    session = boto3.session.Session()
+    client = session.client(
+        service_name='secretsmanager',
+        region_name=region_name
+    )
+    try:
+        get_secret_value_response = client.get_secret_value(
+            SecretId=secret_name
+        )
+    except ClientError as e:
+        raise e
+
+    secret = get_secret_value_response['SecretString']
+    secret_dict = ast.literal_eval(secret)
+    return secret_dict
 
 
 
