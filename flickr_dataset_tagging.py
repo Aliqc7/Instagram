@@ -4,7 +4,7 @@ import math
 
 # -------------------Settings---------------
 
-page_title = "Flickr Photo dataset creator"
+page_title = "Manual photo tagging"
 page_icon = ":camera_with_flash:"
 layout = "centered"
 dl_path = 'input_photos/'
@@ -68,20 +68,41 @@ def run():
     tab1, tab2 = st.tabs(["Introduction", "Tag photos"])
 
     with tab1:
-        with st.form("Your name"):
-            name = st.text_input("Please enter your name and click 'Submit'",
-                                 value="Unknown")
-            submitted = st.form_submit_button("Submit")
-            if submitted:
-                st.session_state[tagger_name] = name
-                st.write(f"Thank you {st.session_state[tagger_name]}! Please go to 'Tag photos' tab to start tagging.")
+        with st.container():
+            with st.form("Your name"):
+                name = st.text_input("**Please enter your name and click 'Submit'**",
+                                     value="Unknown")
+                submitted = st.form_submit_button("Submit")
+                if submitted:
+                    st.session_state[tagger_name] = name
+                    st.write(f"**Thank you {st.session_state[tagger_name]}! Please go to 'Tag photos' tab to start tagging.**")
+
+        with st.container():
+            st.write("""            
+                **What are you helping with?**\n
+                Thank you for agreeing to contribute to this project. You will be shown a series of photos, one at a 
+                time, and will be asked to tag them. Specifically, you should determine if the photo is taken outdoors 
+                or indoors, during the day or the night, includes people, includes pets.\n
+                
+                I will use the tagged photos later on to train a neural network which will hopefully be able to classify  
+                photos that it has never seen before.\n
+                
+                **Please note the following before starting to tag photos:**\n
+                
+                - If none of the tags are applicable, e.g., when the image shows a drawing, a sculpture, a dish of food, 
+                etc., please check the box 'None of the tags are applicable'.\n
+                - Please only consider cats and dogs as pets.\n
+                - For indoor photos, if it is not obvious if the it is 'Day' or 'Night, please tag as day.\n
+                
+
+            """)
 
     with tab2:
         col1, col2 = st.columns(2)
         with col1:
             if tagger_name not in st.session_state:
                 st.session_state [tagger_name] = "Unknown"
-            st.write(f"You are tagging as {st.session_state[tagger_name]}.")
+            st.write(f"**You are tagging as {st.session_state[tagger_name]}.**")
             if photo_id not in st.session_state:
                 set_new_photo_in_session(st, c)
 
