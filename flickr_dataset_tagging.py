@@ -42,52 +42,74 @@ tag_list = flickr.get_tag_list_form_db_pg(c)
 show_photo = "show_photo"
 should_disable = "should_disable"
 photo_id = "photo_id"
+tagger_name = "tagger_name"
 
-def reset_checkbox():
+
+def submit_and_reset(steramlit_handel, sel_tags, cursor):
+    photo_tag_input_list = flickr.create_input_for_manual_tag_photo_table(st.session_state[photo_id],
+                                                                          sel_tags,
+                                                                          st.session_state[tagger_name],
+                                                                          cursor)
+    flickr.add_photo_tags_to_photo_tag_table_pg(photo_tag_input_list, cursor)
+    flickr.update_tag_status_pg(st.session_state[photo_id], cursor)
+    set_new_photo_in_session(steramlit_handel, cursor)
     st.session_state[check_box_key] = False
+
+# def reset_checkbox():
+#     st.session_state[check_box_key] = False
+
+
+
+# def announce_tagger_name():
+#     st.write(f"You are tagging as {st.session_state[tagger_name]}!")
+
+
 def run():
-    with st.container():
-        tagger_name = st.text_input("Please write your name here and press Enter", value="Unknown")
-        if tagger_name:
-            st.write(f"You are tagging as: {tagger_name}")
+    tab1, tab2 = st.tabs(["Introduction", "Tag photos"])
 
-    col1, col2 = st.columns(2)
-    with col1:
-        if photo_id not in st.session_state:
-            set_new_photo_in_session(st, c)
-
-        key = f"{st.session_state[photo_id]}.jpg"
-        image = flickr.read_image_from_s3(key, bucket_name)
-        image = image.resize((500, 500))
-        st.image(image)
-        st.write(st.session_state[photo_id])
-
-    with col2:
-        st.write("Please select all relevant tags and click submit")
-
-        not_applicable = st.checkbox("None of the tags are applicable", value=False, key=check_box_key)
-
-        with st.form("entry_form", clear_on_submit=True):
-            n_radio = math.floor(len(tag_list) / 2)
-            selected_tags = []
-            for i in range(n_radio):
-                selected_tag = st.radio(f"{tag_list[2 * i]}/{tag_list[2 * i + 1]}",
-                                        [tag_list[2 * i], tag_list[2 * i + 1]], key=i,
-                                        disabled=not_applicable)
-                selected_tags.append(selected_tag)
-            if not_applicable:
-                selected_tags = ["NA"]
-
-            submitted = st.form_submit_button("Submit", on_click=reset_checkbox)
+    with tab1:
+        with st.form("Your name"):
+            name = st.text_input("Please enter your name and click 'Submit'",
+                                 value="Unknown")
+            submitted = st.form_submit_button("Submit")
             if submitted:
-                photo_tag_input_list = flickr.create_input_for_manual_tag_photo_table(st.session_state[photo_id],
-                                                                                      selected_tags,
-                                                                                      tagger_name, c)
-                flickr.add_photo_tags_to_photo_tag_table_pg(photo_tag_input_list, c)
-                flickr.update_tag_status_pg(st.session_state[photo_id], c)
-                st.write(f"Successfully uploaded! Thank you very much {tagger_name}!")
+                st.session_state[tagger_name] = name
+                st.write(f"Thank you {st.session_state[tagger_name]}! Please go to 'Tag photos' tab to start tagging.")
+
+    with tab2:
+        col1, col2 = st.columns(2)
+        with col1:
+            if tagger_name not in st.session_state:
+                st.session_state [tagger_name] = "Unknown"
+            st.write(f"You are tagging as {st.session_state[tagger_name]}.")
+            if photo_id not in st.session_state:
                 set_new_photo_in_session(st, c)
-                st.experimental_rerun()
+
+            key = f"{st.session_state[photo_id]}.jpg"
+            image = flickr.read_image_from_s3(key, bucket_name)
+            image = image.resize((500, 500))
+            st.image(image)
+            st.write(st.session_state[photo_id])
+
+        with col2:
+            st.write("Please select all relevant tags and click submit")
+
+            not_applicable = st.checkbox("None of the tags are applicable", value=False, key=check_box_key)
+
+            with st.form("entry_form", clear_on_submit=True):
+                n_radio = math.floor(len(tag_list) / 2)
+                selected_tags = []
+                for i in range(n_radio):
+                    selected_tag = st.radio(f"{tag_list[2 * i]}/{tag_list[2 * i + 1]}",
+                                            [tag_list[2 * i], tag_list[2 * i + 1]], key=i,
+                                            disabled=not_applicable)
+                    selected_tags.append(selected_tag)
+                if not_applicable:
+                    selected_tags = ["NA"]
+
+                submitted = st.form_submit_button("Submit", on_click=submit_and_reset, kwargs=dict(steramlit_handel=st, sel_tags=selected_tags, cursor=c))
+                if submitted:
+                    st.write(f"Successfully uploaded! Thank you very much {st.session_state[tagger_name]}!")
 
 
 if __name__ == "__main__":
