@@ -1,5 +1,5 @@
 import streamlit as st
-import flickr
+import tagging_util
 import math
 
 # -------------------Settings---------------
@@ -18,17 +18,17 @@ st.title(page_title + "" + page_icon)
 
 
 def set_new_photo_in_session(streamlit_handle, cursor):
-    streamlit_handle.session_state[photo_id] = str(flickr.choose_photo_to_tag_manually_pg(cursor))
+    streamlit_handle.session_state[photo_id] = str(tagging_util.choose_photo_to_tag_manually_pg(cursor))
 
 
 @st.cache_resource
 def get_secrets():
-    return flickr.get_aws_secret_for_db(secret_name, region_name)
+    return tagging_util.get_aws_secret_for_db(secret_name, region_name)
 
 
 @st.cache_resource
 def get_db_conn(s):
-    cn = flickr.connect_to_postgres_db(s)
+    cn = tagging_util.connect_to_postgres_db(s)
     cn.autocommit = True
     return cn
 
@@ -37,7 +37,7 @@ def get_db_conn(s):
 secret = get_secrets()
 conn = get_db_conn(secret)
 c = conn.cursor()
-tag_list = flickr.get_tag_list_form_db_pg(c)
+tag_list = tagging_util.get_tag_list_form_db_pg(c)
 
 show_photo = "show_photo"
 should_disable = "should_disable"
@@ -46,12 +46,12 @@ tagger_name = "tagger_name"
 
 
 def submit_and_reset(steramlit_handel, sel_tags, cursor):
-    photo_tag_input_list = flickr.create_input_for_manual_tag_photo_table(st.session_state[photo_id],
+    photo_tag_input_list = tagging_util.create_input_for_manual_tag_photo_table(st.session_state[photo_id],
                                                                           sel_tags,
                                                                           st.session_state[tagger_name],
                                                                           cursor)
-    flickr.add_photo_tags_to_photo_tag_table_pg(photo_tag_input_list, cursor)
-    flickr.update_tag_status_pg(st.session_state[photo_id], cursor)
+    tagging_util.add_photo_tags_to_photo_tag_table_pg(photo_tag_input_list, cursor)
+    tagging_util.update_tag_status_pg(st.session_state[photo_id], cursor)
     set_new_photo_in_session(steramlit_handel, cursor)
     st.session_state[check_box_key] = False
 
@@ -107,7 +107,7 @@ def run():
                 set_new_photo_in_session(st, c)
 
             key = f"{st.session_state[photo_id]}.jpg"
-            image = flickr.read_image_from_s3(key, bucket_name)
+            image = tagging_util.read_image_from_s3(key, bucket_name)
             image = image.resize((500, 500))
             st.image(image)
             st.write(st.session_state[photo_id])

@@ -484,9 +484,5 @@ def get_aws_secret_for_db(secret_name, region_name):
     secret_dict = ast.literal_eval(secret)
     return secret_dict
 
-
-
-
-
 if __name__ == "__main__":
     main()
