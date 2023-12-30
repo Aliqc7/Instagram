@@ -47,9 +47,9 @@ tagger_name = "tagger_name"
 
 def submit_and_reset(steramlit_handel, sel_tags, cursor):
     photo_tag_input_list = tagging_util.create_input_for_manual_tag_photo_table(st.session_state[photo_id],
-                                                                          sel_tags,
-                                                                          st.session_state[tagger_name],
-                                                                          cursor)
+                                                                                sel_tags,
+                                                                                st.session_state[tagger_name],
+                                                                                cursor)
     tagging_util.add_photo_tags_to_photo_tag_table_pg(photo_tag_input_list, cursor)
     tagging_util.update_tag_status_pg(st.session_state[photo_id], cursor)
     set_new_photo_in_session(steramlit_handel, cursor)
