@@ -6,7 +6,7 @@ Link to app: http://tagging.eizee.xyz
 
 **Table of Contetnts**
 - [Description](#description)
-- [Run using Docker](#Run using Docker)
+- [Docker](#Docker)
 
 ### **Description:**
 
@@ -18,7 +18,7 @@ The app shows a user a randomly selected image. The user may choose the relevant
 
 The tags selected by the user will be recorded in a relational database using AWS RDS (PostgresSQL) service.
 
-### **Run using Docker:**
+### **Docker:**
 
 After creating the docker image from the Dockerfile, Run:
 
